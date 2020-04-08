@@ -164,8 +164,7 @@ class Trainer(GenericTrainer):
         self.model_single = myModel
         self.optimizer_single = optimizer
     
-    def mixup_train(self, data, target, freq):
-        mixed_data, mixed_target_a, mixed_target_b, lam = mixup_iCaRL(data, target, freq)
+    def mixup_train(self, mixed_data, mixed_target_a, mixed_target_b, freq, lam):
 
         y_onehot_1 = torch.FloatTensor(len(mixed_target_a), self.dataset.classes)
         y_onehot_2 = torch.FloatTensor(len(mixed_target_b), self.dataset.classes)
@@ -208,19 +207,27 @@ class Trainer(GenericTrainer):
             data_new = data[new_classes_indices]
             target_old = target[old_classes_indices]
             data_old = data[old_classes_indices]
+            
+            alpha = 1
+            lam = np.random.beta(alpha, alpha)
 
-            mixed_data, mixed_target_a, mixed_target_b, lam = mixup_iCaRL(data, target, 1)
-                            
-            loss1 = self.mixup_train(data_new, target_new, 1)
+            mixed_data_new, mixed_target_new_a, mixed_target_new_b = mixup_iCaRL(data_new, target_new, 1, lam)            
+            
+            # loss1 = self.mixup_train(data, target, 1)
             
             if len(target_old.size()) > 0:
                 if target_old.size()[0] > 0:
-                    loss2 = self.mixup_train(data_old, target_old, 1)
-                    loss = loss1 + loss2
+                    mixed_data_old, mixed_target_old_a, mixed_target_old_b = mixup_iCaRL(data_old, target_old, 1, lam)
+                    mixed_data = torch.cat((mixed_data_new, mixed_data_old), 0)
+                    mixed_target_a = torch.cat((mixed_target_new_a, mixed_target_old_a), 0)
+                    mixed_target_b = torch.cat((mixed_target_new_b, mixed_target_old_b), 0)
+                    loss = self.mixup_train(mixed_data, mixed_target_a, mixed_target_b, 1, lam)
                 else:
-                    loss = loss1
+                    loss = self.mixup_train(mixed_data_new, mixed_target_new_a, mixed_target_new_b, 1, lam)
+                    mixed_data = mixed_data_new
             else:
-                loss = loss1
+                loss = self.mixup_train(mixed_data_new, mixed_target_new_a, mixed_target_new_b, 1, lam)
+                mixed_data = mixed_data_new
 
             myT = self.args.T
 
